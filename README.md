@@ -1,29 +1,88 @@
 # Fridge to Feast
 
-Type what's in your fridge. An LLM returns a **structured JSON recipe**, and the app turns it into an interactive tool: scale servings, swap ingredients, check off steps, run step timers, tweak the recipe with follow-up prompts, and cook hands-free in cook mode. It is not a chatbot: the model's text is never shown raw. It is parsed, validated, and rendered as components.
+Type what's in your fridge. An LLM returns a **structured JSON recipe**, and the app turns it into an interactive tool: scale servings, swap ingredients, check off steps, run step timers, tweak the recipe with follow-up prompts, and cook hands-free in cook mode.
 
-**Live demo:** _add link_ · **Screen recording:** _add link_
+**It is not a chatbot.** The model's text is never shown raw. It is parsed, validated and rendered as components.
+
+**Brief chosen:** Fridge-to-recipe
+
+> **Want to try it without an API key?** Add `AI_MOCK=ok` to your `.env` file (see [Setup](#setup)). The app then streams a built-in recipe, and other mock modes trigger every failure path on purpose.
 
 ## Setup
 
-Requires Node 20.3 or newer and a free [Groq](https://console.groq.com/keys) API key.
+Requires **Node 20.3 or newer** and a free [Groq](https://console.groq.com/keys) API key.
 
 ```bash
 npm install
-cp .env.example .env     # paste your GROQ_API_KEY
-npm start                # API on :8787, app on http://localhost:5173
-npm test                 # 29 tests: schema, streaming API, retries, partial JSON, sessions, scaling
+cp .env.example .env        # Windows: copy .env.example .env
+# open .env and paste your GROQ_API_KEY
+npm start                   # API on :8787, app on http://localhost:5173
+npm test                    # 29 tests: schema, streaming API, retries, partial JSON, sessions, scaling
 ```
 
-**No key? Use mock mode.** It needs no API key and can also trigger each failure path on purpose:
+`npm install && npm start` is all it takes once `.env` has a key (or `AI_MOCK=ok`).
+
+### Configuration (`.env`)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GROQ_API_KEY` | none | Your Groq key. It stays on the server and is never sent to the browser |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Any Groq chat model |
+| `GROQ_REASONING` | `low` | `low`, `medium` or `high` (only for reasoning models such as gpt-oss) |
+| `GROQ_JSON_MODE` | `false` | `true` = provider-side JSON validation, but no live streaming (see [Why JSON mode is off](#why-json-mode-is-off)) |
+| `PORT` | `8787` | API port |
+| `MODEL_TIMEOUT_MS` | `30000` | Time limit for each model attempt |
+| `RATE_LIMIT_PER_MINUTE` | `10` | Requests per IP per minute |
+| `AI_MOCK` | off | Replaces the model: `ok`, `flaky`, `malformed`, `shape`, `empty`, `refuse`, `slow`, `fail`, `ratelimit`, `random` |
+
+### Mock mode (no key needed, every failure on demand)
+
+Put one line in `.env`, then run `npm start`. This works on every operating system:
+
+```
+AI_MOCK=ok          # a canned recipe, streamed like the real thing
+AI_MOCK=flaky       # the first answer is broken, the automatic retry fixes it
+AI_MOCK=malformed   # also: shape, empty, refuse, slow, fail, ratelimit, random
+```
+
+Or set it for one run only. macOS/Linux: `AI_MOCK=ok npm start`. Windows PowerShell: `$env:AI_MOCK="ok"; npm start`.
+
+### Production build (one Node process serves the API and the app)
 
 ```bash
-AI_MOCK=ok npm start          # canned recipe, streamed like the real thing
-AI_MOCK=flaky npm start       # first answer is broken, the automatic retry fixes it
-# also: malformed, shape, empty, refuse, slow, fail, ratelimit, random
+npm run serve                                   # macOS/Linux, then open http://localhost:8787
 ```
 
-Production build (one Node process serves the API and the app): `npm run serve`, then open http://localhost:8787.
+```powershell
+npm run build                                   # Windows PowerShell
+$env:NODE_ENV="production"; node server/index.js
+```
+
+The server only serves the built app when `NODE_ENV=production`.
+
+### Deploying
+
+Any Node host works (for example Render). Use build command `npm install --include=dev && npm run build` (the build needs Vite, a dev dependency) and start command `node server/index.js`. Set the environment variables `GROQ_API_KEY` and `NODE_ENV=production`. Free hosts may sleep when idle, so the first request can be slow.
+
+## Assignment checklist
+
+| Requirement | Where it is handled |
+|---|---|
+| React, hooks, function components | Every component is a function component; logic lives in custom hooks (`src/hooks/`) |
+| Free-form text input | `IngredientForm`: free text with live ingredient chips and optional preferences |
+| A real LLM API | Groq streaming chat completions (`server/callModel.js`) |
+| Structured data, parsed and rendered as interactive, stateful UI | One shared Zod schema; recipe, ingredients, steps and blocks render as components with their own state |
+| Bad output: malformed, wrong shape, empty, slow, failed, stale | [Handling bad AI output](#handling-bad-ai-output), covered by tests and mock modes |
+| Loading, error and empty states | Streaming preview, error screen with retry, and an empty state when the input is not food |
+| Works on mobile | Responsive layout, touch-friendly controls, swipe navigation in cook mode |
+| README | This file: setup, AI usage, limitations, time spent |
+| **Stretch:** different block types | Chart (nutrition), card (chef's tip), checklist (equipment) |
+| **Stretch:** streaming | Server-sent events; the recipe appears while it is being written |
+| **Stretch:** refinement loop | Follow-up prompts edit the current recipe, with version history |
+| **Stretch:** save and reload sessions | Sessions saved to localStorage and restored on reload |
+| **Stretch:** polish | Animations, dark mode, keyboard navigation |
+| API key not in the browser | The key is read only on the server; the browser talks to `/api/recipe` |
+| Submission | Public repo with small commits, this README, a screen recording, `npm install && npm start` |
 
 ## Features
 
@@ -35,7 +94,11 @@ Production build (one Node process serves the API and the app): `npm run serve`,
 | **Refinement loop** | "Make it vegetarian" edits the current recipe instead of starting over. Each result is a version you can switch back to. If a refinement fails, the current recipe stays |
 | **Sessions** | Every recipe, with its versions, servings, swaps and ticked steps, is saved to localStorage and restored on reload. Data is re-validated when loaded |
 | **Cooking tools** | Step timers (several at once, with a sound when done) · full-screen cook mode with big text, arrow keys and swipe, and the screen kept awake · copy / share with your servings and swaps |
-| **Polish** | Light and dark theme · keyboard shortcuts (`?` lists them) · animations that respect *reduce motion* · works on mobile |
+| **Polish** | Light and dark theme · keyboard shortcuts (`?` lists them) · animations that respect *reduce motion* · hero photo with responsive sizes |
+
+### Keyboard
+
+`/` type ingredients · `Enter` generate (`Shift+Enter` new line) · `Esc` cancel / leave a field / close · `C` cook mode · `R` tweak · `+` `-` servings · `H` saved recipes · `T` theme · `←` `→` steps in cook mode · `?` all shortcuts. Shortcuts are ignored while typing or while a dialog is open.
 
 ## How it works
 
@@ -49,7 +112,7 @@ useRecipeRequest ◀── SSE events ──      status / chunk / reset / done|
 ```
 
 1. The browser sends `{ingredients, prefs}` (or `{mode: "refine", recipe, instruction}`) to `POST /api/recipe`. **The API key only lives on the server.**
-2. The server streams the model's answer back as server-sent events: `status` (thinking / writing), `chunk` (text), and a final `done` or `error`. A `ping` every 5 s lets the client tell a slow model apart from a dead connection.
+2. The server streams the answer back as server-sent events: `status` (thinking / writing), `chunk` (text), and a final `done` or `error`. A `ping` every 5 s lets the client tell a slow model apart from a dead connection.
 3. When the model finishes, the server validates the whole text with Zod (`shared/recipeSchema.js`). It checks the shape first, then consistency: unique ids, and every `{{i1}}` placeholder in a step points to a real ingredient. If that fails, it sends `reset` and asks the model **once** more, showing it its own error.
 4. The client validates the final result **again** (never trust the network), then stores it as a session. Quantities are numbers, so scaling is arithmetic. Steps use `{{id}}` placeholders, so swapping an ingredient or changing servings rewrites the step text.
 
@@ -69,6 +132,7 @@ src/hooks/useTimers.js          Step timers
 src/lib/partialJson.js          Turns half-streamed JSON into a preview
 src/lib/scale.js                Fractions, scaling, swaps, step text
 src/components/                 RecipeView, IngredientList, StepList, Blocks, RefineBar, CookMode, Status…
+tests/                          API, schema, client logic and scaling tests (node:test)
 ```
 
 ### State design
@@ -102,13 +166,16 @@ Each row is covered by a test in `tests/` or can be triggered with an `AI_MOCK` 
 
 Groq's JSON mode validates the output on the server, but it then sends the whole answer at once, which defeats streaming. Because the app already extracts, validates and retries itself, it streams without JSON mode by default. Set `GROQ_JSON_MODE=true` to trade streaming for provider-side validation. Both paths are handled (`json_validate_failed` counts as invalid output and is retried).
 
-## Keyboard
-
-`/` type ingredients · `Enter` generate (`Shift+Enter` new line) · `Esc` cancel / leave a field / close · `C` cook mode · `R` tweak · `+` `−` servings · `H` saved recipes · `T` theme · `←` `→` steps in cook mode · `?` all shortcuts. Shortcuts are ignored while typing or while a dialog is open.
-
 ## AI usage
 
-_Edit this so it is true for you before submitting._ I used Claude (Claude Code) as a pair programmer: to plan the architecture, draft the code and tests, and review error handling and the UI. I read, ran and tested every part and can explain the decisions. The ones I would defend in an interview:
+I used Claude (both the chat app and Claude Code) throughout this project, and I want to be upfront about where:
+
+- **Planning:** choosing the brief, designing the JSON shape, and deciding how to handle failures.
+- **Code:** first drafts of the server, schema, hooks, components and styling, which I then ran, changed and extended.
+- **Tests:** drafting test cases and failure scenarios, including the mock modes.
+- **Review and help:** reviewing error handling, debugging, Git and deployment help, and drafting this README.
+
+I read and ran the code and can explain it. The decisions I would defend in an interview:
 
 - Validating on the client **and** the server with one shared Zod schema.
 - A request id **plus** `AbortController` for stale responses (abort alone is not enough: a response can already be in flight).
@@ -126,15 +193,25 @@ The model inside the app is Groq's `openai/gpt-oss-120b`.
 - Sessions live in one browser's localStorage (last 20 recipes, up to 8 versions each).
 - The rate limit is in memory, so it resets on restart and isn't shared between server instances.
 - Timers reset if you switch versions or reload the page.
-- `npm audit` reports advisories for the Vite 5 dev server (it only affects local development) and Zod 3 (memory use on very large arrays). The latter is limited here by the 32 KB body limit and `.max()` on every array; moving to Zod 4 would remove it.
+- Tests cover the server, schema and client logic; there are no browser (end-to-end) or component tests.
+- `npm audit` reports advisories for the Vite 5 dev server (esbuild, development only) and Zod 3. The request body is capped at 32 KB; moving to Zod 4 would remove the Zod one.
+- On Windows, `npm run serve` does not work in cmd or PowerShell because of the `NODE_ENV=` prefix; use the two-step command in [Setup](#setup).
 
 ## What I would do next
 
-Component tests with Testing Library, accounts and sync instead of localStorage, a smarter refinement merge that keeps ticked steps, unit conversion, and an "I'm missing this" button that asks for a substitute for one ingredient.
+Component tests with Testing Library, accounts and sync instead of localStorage, a smarter refinement merge that keeps ticked steps, unit conversion, a cross-platform `serve` script, and an "I'm missing this" button that asks for a substitute for one ingredient.
 
 ## Time spent
 
-_Fill in honestly, e.g. setup 0.5h, API, streaming and validation 3h, UI and features 3.5h, tests and README 1h._
+About 8 hours of focused work, spread over four days (Nov 12 to 15). This is an approximate breakdown, not a stopwatch count.
+
+| Area | Hours |
+|---|---|
+| Setup and planning (brief, JSON shape, architecture) | 0.5 |
+| API, streaming and validation | 2.5 |
+| UI, animations and features | 3 |
+| Tests, README and Git | 2 |
+| **Total** | **8** |
 
 ---
-Hero photo from [Unsplash](https://unsplash.com) (`photo-1498837167922-ddd27525d352`, Unsplash License).
+Hero photo from [Unsplash](https://unsplash.com) (Unsplash License).
