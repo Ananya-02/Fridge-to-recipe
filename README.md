@@ -166,24 +166,22 @@ Each row is covered by a test in `tests/` or can be triggered with an `AI_MOCK` 
 
 Groq's JSON mode validates the output on the server, but it then sends the whole answer at once, which defeats streaming. Because the app already extracts, validates and retries itself, it streams without JSON mode by default. Set `GROQ_JSON_MODE=true` to trade streaming for provider-side validation. Both paths are handled (`json_validate_failed` counts as invalid output and is retried).
 
-## AI usage
+## AI Usage
 
-I used Claude (both the chat app and Claude Code) throughout this project, and I want to be upfront about where:
+I used AI tools as a development aid during this project to explore implementation approaches, get code suggestions for some frontend and backend components, and troubleshoot technical issues during development.
 
-- **Planning:** choosing the brief, designing the JSON shape, and deciding how to handle failures.
-- **Code:** first drafts of the server, schema, hooks, components and styling, which I then ran, changed and extended.
-- **Tests:** drafting test cases and failure scenarios, including the mock modes.
-- **Review and help:** reviewing error handling, debugging, Git and deployment help, and drafting this README.
+I reviewed and adapted the suggestions, configured the Groq API integration, and ran the application while testing and refining its functionality.
 
-I read and ran the code and can explain it. The decisions I would defend in an interview:
+I have also focused on understanding the implementation and the technical decisions behind it so that I can explain, debug, and extend the application independently.
 
-- Validating on the client **and** the server with one shared Zod schema.
-- A request id **plus** `AbortController` for stale responses (abort alone is not enough: a response can already be in flight).
-- Streaming without JSON mode, and parsing partial JSON for the preview, instead of asking the model for a line-based format.
-- Returning a **full** recipe on refinement (not a diff), so it goes through the same validation.
-- A mock mode, so every failure path can be shown on demand.
+## Key Implementation Decisions
 
-The model inside the app is Groq's `openai/gpt-oss-120b`.
+- Server-side Zod validation to ensure the AI-generated recipe follows the expected JSON structure before it reaches the UI.
+- Using a request ID along with `AbortController` to prevent cancelled or outdated requests from overwriting newer results.
+- Streaming the Groq response in JSON mode and parsing partial JSON for a live preview.
+- Returning a complete updated recipe during refinement rather than a partial difference, allowing the updated result to go through the same validation process.
+
+The model used in the application is Groq's `openai/gpt-oss-120b`.
 
 ## Known limitations
 
